@@ -12,7 +12,7 @@ It is designed to serve and modify structured character data such as the *Friend
 Make sure you have Python 3.10+ and install the required packages:
 
 ```bash
-pip install flask polars
+uv sync
 ```
 
 By default, the server runs at:
