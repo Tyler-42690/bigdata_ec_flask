@@ -11,9 +11,10 @@ app = Flask(__name__)
 
 # Configure loading of CSV files
 logging.basicConfig(level=logging.INFO)
+CSV_PATH = "friends_data.csv"
 
 #Load CSV files from Polars with lazy loading
-def load_csv(file_path : str) -> pl.DataFrame | None:
+def load_csv(file_path : str, attempts = 5) -> pl.DataFrame | None:
     '''
         Load CSV file using Polars with lazy loading for potentially larger files.
         Args:
@@ -23,15 +24,17 @@ def load_csv(file_path : str) -> pl.DataFrame | None:
             pl.DataFrame: Loaded DataFrame or None if an error occurs.
     '''
     try:
-        df = pl.scan_csv(file_path).collect()
-        logging.info("CSV file %s loaded successfully.", file_path)
-        return df
+        for attempt in range(attempts):
+            logging.info("Attempt %d to load CSV file: %s", attempt + 1, file_path)
+            df = pl.scan_csv(file_path).collect()
+            logging.info("CSV file %s loaded successfully.", file_path)
+            return df
     except (FileNotFoundError, pl.exceptions.NoDataError, pl.exceptions.ComputeError) as e:
         logging.error("Error loading CSV file %s: %s", file_path, e, exc_info=True)
         return None
 
 # Sample data
-items = load_csv("friends_data.csv")
+items = load_csv(CSV_PATH)
 #items = data_file.to_dicts() if data_file is not None else []
 
 # Show Home page
@@ -49,20 +52,23 @@ def home_page():
 # Get All Items
 
 
-@app.route("/items", methods=["GET"])
-def get_items():
+@app.route("/characters", methods=["GET"])
+def get_characters():
     '''
         Retrieve all items from the processed CSV data.
 
         Returns:
             JSON response with a list of all items.
     '''
-    return jsonify(items)
+    if items is None:
+        logging.error("No data available to retrieve characters.")
+        return jsonify({"message": "No data available"}), 500
+    return jsonify(items.to_dicts())
 
 
 # Get Specific Item
-@app.route("/items/<int:item_id>", methods=["GET"])
-def get_item(item_id):
+@app.route("/characters/<int:item_id>", methods=["GET"])
+def get_character(item_id):
     '''
         Retrieve a specific item by ID from the processed CSV data.
 
@@ -71,48 +77,66 @@ def get_item(item_id):
         Returns:
             JSON response with the item details or a not found message.
     '''
-    # Using Python Generator and Iterator (next)
-    item = next((item for item in items if item["id"] == item_id), None)
-    if item:
-        return jsonify(item)
-    return jsonify({"message": "Item not found"}), 404
-
-
-# Create a new Item
-@app.route("/items", methods=["POST"])
-def create_item():
-    '''
-        Create a new item and add it to the processed CSV data.
-        
-        Returns:
-            JSON response with the created item details.
-    '''
-    data = request.get_json()
-    new_item = {"id": len(items) + 1, "name": data["name"]}
-    items.append(new_item)
-    return jsonify(new_item), 201
+    row = items.filter(pl.col("id") == item_id)
+    if row.height == 0: # No rows in row dataframe indicates item not found
+        return jsonify({"message": "Item not found"}), 404
+    return jsonify(row.to_dicts()[0])
 
 
 # Update existing Item
-@app.route("/items/<int:item_id>", methods=["PUT"])
-def update_item(item_id):
-    '''
-        Update an existing item in the processed CSV data.
-        Args:
-            item_id (int): ID of the item to update.
-        Returns:
-            JSON response with the updated item details or a not found message.
-    '''
-    data = request.get_json()
-    item = next((item for item in items if item["id"] == item_id), None)
-    if item:
-        item["name"] = data["name"]
-        return jsonify(item)
-    return jsonify({"message": "Item not found"}), 404
+@app.route("/characters/<int:item_id>", methods=["PUT"])
+def update_character(item_id):
+    """
+    Update an existing character in the CSV file.
+
+    Args:
+        item_id (int): ID of the character to update.
+    Returns:
+        JSON response with the updated character details or a not found message.
+    """
+    try:
+        # Load the dataset
+        global items
+
+        # Ensure 'id' column is int for comparison
+        items = items.with_columns(pl.col("id").cast(pl.Int64))
+
+        # Parse the incoming JSON data
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+
+        # Check if item exists
+        if item_id not in items["id"].to_list():
+            logging.error("Item with ID %d not found for update.", item_id)
+            return jsonify({"message": "Item not found"}), 404
+
+        # Update the row using Polars expressions
+        for key, value in data.items():
+            if key in items.columns and key != "id":  # never update the id
+                items = items.with_columns(
+                    pl.when(pl.col("id") == item_id)
+                    .then(value)
+                    .otherwise(pl.col(key))
+                    .alias(key)
+                )
+
+        # Save changes back to CSV
+        items.write_csv(CSV_PATH)
+
+        # Get updated row as dictionary
+        updated_row = items.filter(pl.col("id") == item_id).to_dicts()[0]
+
+        logging.info("Item with ID %d updated successfully.", item_id)
+        return jsonify(updated_row), 200
+
+    except Exception as e:
+        logging.exception("Error updating character: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 # Delete Existing Item
-@app.route("/items/<int:item_id>", methods=["DELETE"])
+@app.route("/characters/<int:item_id>", methods=["DELETE"])
 def delete_item(item_id):
     '''
         Delete an existing item from the processed CSV data.
@@ -122,11 +146,19 @@ def delete_item(item_id):
             JSON response with a success or not found message.
     '''
     global items
-    item = next((item for item in items if item["id"] == item_id), None)
-    if item:
-        items = [i for i in items if i["id"] != item_id]
-        return jsonify({"message": "Item deleted"})
-    return jsonify({"message": "Item not found"}), 404
+
+    if item_id not in items["id"].to_list():
+        logging.error("Item with ID %d not found for deletion.", item_id)
+        return jsonify({"message": "Item not found"}), 404
+
+    # Remove the row
+    items = items.filter(pl.col("id") != item_id)
+
+    # Save updated DataFrame to CSV
+    items.write_csv(CSV_PATH)
+
+    logging.info("Item with ID %d deleted successfully.", item_id)
+    return jsonify({"message": "Item deleted successfully."}), 200
 
 
 if __name__ == "__main__":
