@@ -12,7 +12,12 @@ app = Flask(__name__)
 
 
 # Configure loading of CSV files
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(filename='output.log',
+    filemode='a', #Append mode               
+    level=logging.INFO,         
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 CSV_PATH = "friends_data.csv"
 
 #Load CSV files from Polars with lazy loading
