@@ -13,11 +13,12 @@ Make sure you have Python 3.10+ and install the required packages:
 
 ```bash
 pip install flask polars
+```
 
 By default, the server runs at:
-
+```bash
 http://127.0.0.1:5002
-
+```
 🔹 Step 1: Open Thunder Client
 
 Install Thunder Client from the VS Code Extensions Marketplace.
@@ -31,23 +32,23 @@ Create a new collection called Friends API.
 Request:
 
 Method: GET
-
+```bash
 URL: http://127.0.0.1:5002/
-
+```
 Expected Response:
-
+```bash
 "Basic CSV Reading and Writing API using Flask"
-
+```
 🔹 Step 3: Retrieve All Characters
 
 Request:
 
 Method: GET
-
+```bash
 URL: http://127.0.0.1:5002/characters
-
+```
 Expected Response:
-
+```bash
 [
   {
     "id": 1,
@@ -57,7 +58,7 @@ Expected Response:
   },
   ...
 ]
-
+```
 
 If you see "No data available", make sure your CSV file exists and matches the schema above.
 
@@ -66,11 +67,12 @@ If you see "No data available", make sure your CSV file exists and matches the s
 Request:
 
 Method: GET
-
+```bash
 URL: http://127.0.0.1:5002/characters/3
+```
 
 Expected Response:
-
+```bash
 {
   "id": 3,
   "first_name": "Chandler",
@@ -78,34 +80,34 @@ Expected Response:
   "city": "New York",
   ...
 }
-
+```
 
 If not found:
-
+```bash
 {"message": "Item not found"}
-
+```
 🔹 Step 5: Update a Character
 
 Request:
 
 Method: PUT
-
+```bash
 URL: http://127.0.0.1:5002/characters/3
-
+```
 Headers:
 Content-Type: application/json
 
 Body (JSON):
-
+```bash
 {
   "city": "New York",
   "catchphrase": "Could I *be* wearing any more clothes?",
   "screen_time_minutes": 655
 }
-
+```
 
 Expected Response:
-
+```bash
 {
   "id": 3,
   "first_name": "Chandler",
@@ -115,7 +117,7 @@ Expected Response:
   "screen_time_minutes": 655,
   ...
 }
-
+```
 
 The corresponding CSV line should update automatically.
 
@@ -124,14 +126,15 @@ The corresponding CSV line should update automatically.
 Request:
 
 Method: DELETE
-
+```bash
 URL: http://127.0.0.1:5002/characters/3
-
+```
 Expected Response:
-
+```bash
 {"message": "Item deleted successfully."}
-
+```
 
 If the record doesn’t exist:
-
+```bash
 {"message": "Item not found"}
+```
