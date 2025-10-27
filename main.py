@@ -2,6 +2,8 @@
 Basic CSV Reading and Writing API using Flask and Polars
 '''
 import logging
+from functools import reduce
+import operator
 from flask import Flask, jsonify, request
 import polars as pl
 
@@ -54,33 +56,84 @@ def home_page():
 
 @app.route("/characters", methods=["GET"])
 def get_characters():
-    '''
-        Retrieve all items from the processed CSV data.
+    """
+    Get paginated list of characters from the CSV file.
+    Query Params:
+        page (int): Page number (default=1)
+        limit (int): Number of items per page (default=10)
+    Returns:
+        JSON list of character records with pagination metadata
+    """
+    # Parse query parameters
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 10))
+    
+    # Calculate offset
+    offset = (page - 1) * limit
 
-        Returns:
-            JSON response with a list of all items.
-    '''
-    if items is None:
-        logging.error("No data available to retrieve characters.")
-        return jsonify({"message": "No data available"}), 500
-    return jsonify(items.to_dicts())
+    # Load dataset using Polars
+
+    # Get total records
+    total_records = items.height
+    total_pages = (total_records + limit - 1) // limit
+
+    # Paginate
+    paginated_df = items.slice(offset, limit)
+
+    # Convert to list of dicts for JSON output
+    characters = paginated_df.to_dicts()
+
+    # Return with metadata
+    return jsonify({
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "total_records": total_records,
+        "data": characters
+    })
+
 
 
 # Get Specific Item
-@app.route("/characters/<int:item_id>", methods=["GET"])
-def get_character(item_id):
-    '''
-        Retrieve a specific item by ID from the processed CSV data.
+@app.route("/characters/search", methods=["GET"])
+def get_character():
+    """
+    Search characters by first_name OR last_name (case-insensitive).
 
-        Args:
-            item_id (int): ID of the item to retrieve.
-        Returns:
-            JSON response with the item details or a not found message.
-    '''
-    row = items.filter(pl.col("id") == item_id)
-    if row.height == 0: # No rows in row dataframe indicates item not found
-        return jsonify({"message": "Item not found"}), 404
-    return jsonify(row.to_dicts()[0])
+    Query Parameters:
+        first_name (str, optional): Character's first name
+        last_name  (str, optional): Character's last name
+
+    Returns:
+        JSON response with all matching characters or an error message.
+    """
+    try:
+        first_name = request.args.get("first_name", "").strip().lower()
+        last_name = request.args.get("last_name", "").strip().lower()
+
+        if not first_name and not last_name:
+            return jsonify({"error": "Please provide at least 'first_name' or 'last_name'."}), 400
+
+        df = items
+
+        # Build OR conditions
+        conditions = []
+        if first_name:
+            conditions.append(pl.col("first_name").str.to_lowercase() == first_name)
+        if last_name:
+            conditions.append(pl.col("last_name").str.to_lowercase() == last_name)
+
+        # Combine conditions with OR
+        filtered = df.filter(reduce(operator.or_, conditions))
+
+        if filtered.height == 0:
+            return jsonify({"message": "No matching characters found"}), 404
+
+        return jsonify(filtered.to_dicts()), 200
+
+    except Exception as e:
+        logging.exception("Error searching characters: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 # Update existing Item
