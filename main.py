@@ -168,14 +168,25 @@ def update_character(item_id):
             return jsonify({"message": "Item not found"}), 404
 
         # Update the row using Polars expressions
+        # for key, value in data.items():
+        #     if key in items.columns and key != "id":  # never update the id
+        #         items = items.with_columns(
+        #             pl.when(pl.col("id") == item_id)
+        #             .then(pl.lit(value))
+        #             .otherwise(pl.col(key))
+        #             .alias(key)
+        #         )
+
+        update_exprs = []
+
         for key, value in data.items():
-            if key in items.columns and key != "id":  # never update the id
-                items = items.with_columns(
-                    pl.when(pl.col("id") == item_id)
-                    .then(value)
-                    .otherwise(pl.col(key))
-                    .alias(key)
-                )
+            if key in items.columns and key != "id":
+                expr = pl.when(pl.col("id") == item_id).then(pl.lit(value)).otherwise(pl.col(key)).alias(key)
+                update_exprs.append(expr)
+
+        if update_exprs:
+            items = items.with_columns(update_exprs)
+
 
         # Save changes back to CSV
         items.write_csv(CSV_PATH)
