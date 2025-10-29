@@ -76,8 +76,6 @@ def get_characters():
     # Calculate offset
     offset = (page - 1) * limit
 
-    # Load dataset using Polars
-
     # Get total records
     total_records = items.height
     total_pages = (total_records + limit - 1) // limit
@@ -220,5 +218,4 @@ def delete_item(item_id):
 
 
 if __name__ == "__main__":
-    #print("Items:", items)
     app.run(port=5002)
