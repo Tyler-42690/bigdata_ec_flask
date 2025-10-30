@@ -42,7 +42,6 @@ def load_csv(file_path : str, attempts = 5) -> pl.DataFrame | None:
 
 # Sample data
 items = load_csv(CSV_PATH)
-#items = data_file.to_dicts() if data_file is not None else []
 
 # Show Home page
 @app.route("/", methods=["GET"])
@@ -57,8 +56,6 @@ def home_page():
 
 
 # Get All Items
-
-
 @app.route("/characters", methods=["GET"])
 def get_characters():
     """
@@ -69,9 +66,16 @@ def get_characters():
     Returns:
         JSON list of character records with pagination metadata
     """
-    # Parse query parameters
-    page = int(request.args.get("page", 1))
-    limit = int(request.args.get("limit", 10))
+    
+    # Default pagination values
+    page = 1
+    limit = 10
+
+    # Try to parse JSON (optional)
+    json_data = request.get_json(silent=True)
+    if json_data:
+        page = int(json_data.get("page", page))
+        limit = int(json_data.get("limit", limit))
     
     # Calculate offset
     offset = (page - 1) * limit
@@ -166,16 +170,6 @@ def update_character(item_id):
         if item_id not in items["id"].to_list():
             logging.error("Item with ID %d not found for update.", item_id)
             return jsonify({"message": "Item not found"}), 404
-
-        # Update the row using Polars expressions
-        # for key, value in data.items():
-        #     if key in items.columns and key != "id":  # never update the id
-        #         items = items.with_columns(
-        #             pl.when(pl.col("id") == item_id)
-        #             .then(pl.lit(value))
-        #             .otherwise(pl.col(key))
-        #             .alias(key)
-        #         )
 
         update_exprs = []
 
